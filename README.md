@@ -43,14 +43,41 @@
 
 # 文档
 
-安装及使用：https://233boy.com/xray/xray-script/
+### 安装
+
+系统支持：Ubuntu，Debian，CentOS，推荐使用 Ubuntu 22，谨慎使用 CentOS，脚本可能无法正常运行！
+
+执行如下命令：
+
+```bash
+bash <(wget -qO- -o- https://github.com/fcurrk/Xray/raw/main/install.sh)
+```
+
+如需查看安装命令帮助，在安装命令后面加 -h 即可
+
+脚本在安装完成后会询问是否创建一个 VLESS-REALITY 初始配置
+
+### 目录
+
+Xray 脚本全部保存在 /etc/xray
+
+脚本：/etc/xray/sh
+
+核心：/etc/xray/bin
+
+配置：/etc/xray/conf
+
+### 卸载
+```bash
+xray uninstall
+```
 
 # 帮助
 
 使用：`xray help`
 
 ```
-Xray script v1.21 by 233boy
+Xray script v1.21
 Usage: xray [options]... [args]...
 
 基本:
@@ -118,6 +145,5 @@ Usage: xray [options]... [args]...
    h, help                                         显示此帮助界面
 
 谨慎使用 del, ddel, 此选项会直接删除配置; 无需确认
-反馈问题) https://github.com/233boy/xray/issues
-文档(doc) https://233boy.com/xray/xray-script/
 ```
+更多内容访问原作者文档(doc) https://233boy.com/xray/xray-script/
