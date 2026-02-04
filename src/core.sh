@@ -173,7 +173,7 @@ show_list() {
 is_test() {
     case $1 in
     number)
-        echo $2 | egrep '^[1-9][0-9]?+$'
+        echo $2 | grep -E '^[1-9][0-9]?+$'
         ;;
     port)
         if [[ $(is_test number $2) ]]; then
@@ -184,13 +184,13 @@ is_test() {
         [[ $(is_port_used $2) && ! $is_cant_test_port ]] && echo ok
         ;;
     domain)
-        echo $2 | egrep -i '^\w(\w|\-|\.)?+\.\w+$'
+        echo $2 | grep -E -i '^\w(\w|\-|\.)?+\.\w+$'
         ;;
     path)
-        echo $2 | egrep -i '^\/\w(\w|\-|\/)?+\w$'
+        echo $2 | grep -E -i '^\/\w(\w|\-|\/)?+\w$'
         ;;
     uuid)
-        echo $2 | egrep -i '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+        echo $2 | grep -E -i '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
         ;;
     esac
 
@@ -341,6 +341,7 @@ create() {
         is_listen='listen:"0.0.0.0"'
         [[ $host ]] && is_listen=${is_listen/0.0.0.0/127.0.0.1}
         is_sniffing='sniffing:{enabled:true,destOverride:["http","tls"]}'
+        [[ $is_reality ]] && is_sniffing='sniffing:{enabled:true,destOverride:["http","tls"],routeOnly:true}'
         is_new_json=$(jq '{inbounds:[{tag:"'$is_config_name'",port:'"$port"','"$is_listen"',protocol:"'$is_protocol'",'"$json_str"','"$is_sniffing"'}]}' <<<{})
         if [[ $is_dynamic_port ]]; then
             [[ ! $is_dynamic_port_range ]] && get dynamic-port
@@ -525,7 +526,7 @@ change() {
     1)
         # new port
         is_new_port=$3
-        [[ $host && ! $is_caddy ]] && err "($is_config_file) 不支持更改端口, 因为没啥意义."
+        [[ $host && ! $is_caddy || $is_no_auto_tls ]] && err "($is_config_file) 不支持更改端口, 因为没啥意义."
         if [[ $is_new_port && ! $is_auto ]]; then
             [[ ! $(is_test port $is_new_port) ]] && err "请输入正确的端口, 可选(1-65535)"
             [[ $is_new_port != 443 && $(is_test port_used $is_new_port) ]] && err "无法使用 ($is_new_port) 端口"
@@ -753,7 +754,7 @@ del() {
                 [[ ! $old_host ]] && return # no host exist or not set new host;
                 is_del_host=$old_host
             }
-            [[ $is_del_host && $host != $old_host ]] && {
+            [[ $is_del_host && $host != $old_host && -f $is_caddy_conf/$is_del_host.conf ]] && {
                 rm -rf $is_caddy_conf/$is_del_host.conf $is_caddy_conf/$is_del_host.conf.add
                 [[ ! $is_new_json ]] && manage restart caddy &
             }
@@ -778,7 +779,7 @@ uninstall() {
     manage stop &>/dev/null
     manage disable &>/dev/null
     rm -rf $is_core_dir $is_log_dir $is_sh_bin /lib/systemd/system/$is_core.service
-    sed -i "/alias $is_core=/d" /root/.bashrc
+    sed -i "/$is_core/d" /root/.bashrc
     # uninstall caddy; 2 is ask result
     if [[ $REPLY == '2' ]]; then
         manage stop caddy &>/dev/null
@@ -911,7 +912,7 @@ add() {
         #     ;;
         *)
             for v in ${protocol_list[@]}; do
-                [[ $(egrep -i "^$is_lower$" <<<$v) ]] && is_new_protocol=$v && break
+                [[ $(grep -E -i "^$is_lower$" <<<$v) ]] && is_new_protocol=$v && break
             done
 
             [[ ! $is_new_protocol ]] && err "无法识别 ($1), 请使用: $is_core add [protocol] [args... | auto]"
@@ -994,7 +995,7 @@ add() {
         h2 | ws | grpc | xhttp)
             old_host=$host
             if [[ ! $is_use_tls ]]; then
-                host=
+                unset host is_no_auto_tls
             else
                 [[ $is_old_net == 'grpc' ]] && {
                     path=/$path
@@ -1060,7 +1061,7 @@ add() {
                 ask set_header_type
             }
             for v in ${is_tmp_list[@]}; do
-                [[ $(egrep -i "^${is_use_header_type}${is_use_method}$" <<<$v) ]] && is_tmp_use_type=$v && break
+                [[ $(grep -E -i "^${is_use_header_type}${is_use_method}$" <<<$v) ]] && is_tmp_use_type=$v && break
             done
             [[ ! ${is_tmp_use_type} ]] && {
                 warn "(${is_use_header_type}${is_use_method}) 不是一个可用的${is_tmp_use_name}."
@@ -1197,8 +1198,8 @@ get() {
     file)
         is_file_str=$2
         [[ ! $is_file_str ]] && is_file_str='.json$'
-        # is_all_json=("$(ls $is_conf_dir | egrep $is_file_str)")
-        readarray -t is_all_json <<<"$(ls $is_conf_dir | egrep -i "$is_file_str" | sed '/dynamic-port-.*-link/d' | head -233)" # limit max 233 lines for show.
+        # is_all_json=("$(ls $is_conf_dir | grep -E $is_file_str)")
+        readarray -t is_all_json <<<"$(ls $is_conf_dir | grep -E -i "$is_file_str" | sed '/dynamic-port-.*-link/d' | head -233)" # limit max 233 lines for show.
         [[ ! $is_all_json ]] && err "无法找到相关的配置文件: $2"
         [[ ${#is_all_json[@]} -eq 1 ]] && is_config_file=$is_all_json && is_auto_get_config=1
         [[ ! $is_config_file ]] && {
@@ -1249,7 +1250,10 @@ get() {
                 [[ $? != 0 ]] && err "无法读取动态端口文件: $is_dynamic_port"
             fi
             if [[ $is_caddy && $host && -f $is_caddy_conf/$host.conf ]]; then
-                is_tmp_https_port=$(egrep -o "$host:[1-9][0-9]?+" $is_caddy_conf/$host.conf | sed s/.*://)
+                is_tmp_https_port=$(grep -E -o "$host:[1-9][0-9]?+" $is_caddy_conf/$host.conf | sed s/.*://)
+            fi
+            if [[ $host && ! -f $is_caddy_conf/$host.conf ]]; then
+                is_no_auto_tls=1
             fi
             [[ $is_tmp_https_port ]] && is_https_port=$is_tmp_https_port
             [[ $is_client && $host ]] && port=$is_https_port
@@ -1416,7 +1420,11 @@ get() {
         fi
         ;;
     ssss | ss2022)
-        openssl rand -base64 32
+        if [[ $(grep 128 <<<$ss_method) ]]; then
+            openssl rand -base64 16
+        else
+            openssl rand -base64 32
+        fi
         [[ $? != 0 ]] && err "无法生成 Shadowsocks 2022 密码, 请安装 openssl."
         ;;
     ping)
@@ -1852,8 +1860,9 @@ main() {
         get_ip
         msg $ip
         ;;
-    log | logerr)
-        get $@
+    log | logerr | errlog)
+        load log.sh
+        log_set $@
         ;;
     url | qr)
         url_qr $@
