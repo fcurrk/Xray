@@ -39,6 +39,19 @@ header_type_list=(
     dtls
     wireguard
 )
+header_type_list_new=(
+    header-dtls
+    header-srtp
+    header-utp
+    header-wechat
+    header-wireguard
+    mkcp-original
+)
+# new mkcp header type
+if [[ $(echo -e "26.1.24\n${is_core_ver##* }" | sort -V | head -n1) == '26.1.24' ]]; then
+    is_xray_new=1
+    header_type_list=(${header_type_list_new[@]})
+fi
 mainmenu=(
     "添加配置"
     "更改配置"
@@ -98,11 +111,6 @@ servername_list=(
     www.cloudflare.com
     dash.cloudflare.com
     aws.amazon.com
-    m.media-amazon.com
-    updates.cdn-apple.com
-    addons.mozilla.org
-    www.lovelive-anime.jp
-    d1.awsstatic.com
 )
 
 is_random_ss_method=${ss_method_list[$(shuf -i 4-6 -n1)]}     # random only use ss2022
@@ -673,7 +681,7 @@ change() {
         [[ $is_auto ]] && is_new_servername=$is_random_servername
         [[ ! $is_new_servername ]] && ask string is_new_servername "请输入新的 serverName:"
         is_servername=$is_new_servername
-        [[ $(grep -i "^552039.xyz$" <<<$is_servername) ]] && {
+        [[ $(grep -i "^233boy.com$" <<<$is_servername) ]] && {
             err "你干嘛～哎呦～"
         }
         add $net
@@ -704,7 +712,7 @@ change() {
         [[ ! -f $is_caddy_conf/${host}.conf.add ]] && err "无法配置伪装网站."
         [[ ! $is_new_proxy_site ]] && ask string is_new_proxy_site "请输入新的伪装网站 (例如 example.com):"
         proxy_site=$(sed 's#^.*//##;s#/$##' <<<$is_new_proxy_site)
-        [[ $(grep -i "^552039.xyz$" <<<$proxy_site) ]] && {
+        [[ $(grep -i "^233boy.com$" <<<$proxy_site) ]] && {
             err "你干嘛～哎呦～"
         } || {
             load caddy.sh
@@ -778,18 +786,18 @@ uninstall() {
     fi
     manage stop &>/dev/null
     manage disable &>/dev/null
-    rm -rf $is_core_dir $is_log_dir $is_sh_bin /lib/systemd/system/$is_core.service
+    rm -rf $is_core_dir $is_log_dir $is_sh_bin /lib/systemd/system/$is_core.service /etc/init.d/$is_core
     sed -i "/$is_core/d" /root/.bashrc
     # uninstall caddy; 2 is ask result
     if [[ $REPLY == '2' ]]; then
         manage stop caddy &>/dev/null
         manage disable caddy &>/dev/null
-        rm -rf $is_caddy_dir $is_caddy_bin /lib/systemd/system/caddy.service
+        rm -rf $is_caddy_dir $is_caddy_bin /lib/systemd/system/caddy.service /etc/init.d/caddy
     fi
     [[ $is_install_sh ]] && return # reinstall
     _green "\n卸载完成!"
-#    msg "脚本哪里需要完善? 请反馈"
-#    msg "反馈问题) $(msg_ul https://github.com/${is_sh_repo}/issues)\n"
+    msg "脚本哪里需要完善? 请反馈"
+    msg "反馈问题) $(msg_ul https://github.com/${is_sh_repo}/issues)\n"
 }
 
 # manage run status
@@ -827,7 +835,15 @@ manage() {
         is_do_name_msg=$is_core_name
         ;;
     esac
-    systemctl $is_do $is_do_name
+    if [[ $is_alpine ]]; then
+        case $is_do in
+        enable)  rc-update add $is_do_name default &>/dev/null ;;
+        disable) rc-update del $is_do_name default &>/dev/null ;;
+        *)       rc-service $is_do_name $is_do ;;
+        esac
+    else
+        systemctl $is_do $is_do_name
+    fi
     [[ $is_test_run && ! $is_new_install ]] && {
         sleep 2
         if [[ ! $(pgrep -f $is_run_bin) ]]; then
@@ -1095,7 +1111,7 @@ add() {
                 get_port
                 is_https_port=$tmp_port
                 warn "端口 (80 或 443) 已经被占用, 你也可以考虑使用 no-auto-tls"
-#                msg "\e[41m no-auto-tls 帮助(help)\e[0m: $(msg_ul https://233boy.com/$is_core/no-auto-tls/)\n"
+                msg "\e[41m no-auto-tls 帮助(help)\e[0m: $(msg_ul https://233boy.com/$is_core/no-auto-tls/)\n"
                 msg "\n Caddy 将使用非标准端口实现自动配置 TLS, HTTP:$is_http_port HTTPS:$is_https_port\n"
                 msg "请确定是否继续???"
                 pause
@@ -1213,8 +1229,8 @@ get() {
             is_json_str=$(cat $is_conf_dir/"$is_config_file")
             is_json_data_base=$(jq '.inbounds[0]|.protocol,.port,(.settings|(.clients[0]|.id,.password),.method,.password,.address,.port,.detour.to,(.accounts[0]|.user,.pass))' <<<$is_json_str)
             [[ $? != 0 ]] && err "无法读取此文件: $is_config_file"
-            is_json_data_more=$(jq '.inbounds[0]|.streamSettings|.network,.tcpSettings.header.type,(.kcpSettings|.seed,.header.type),.quicSettings.header.type,.wsSettings.path,.httpSettings.path,.grpcSettings.serviceName,.xhttpSettings.path' <<<$is_json_str)
-            is_json_data_host=$(jq '.inbounds[0]|.streamSettings|.grpc_host,.wsSettings.headers.Host,.httpSettings.host[0],.xhttpSettings.host' <<<$is_json_str)
+            is_json_data_more=$(jq '.inbounds[0]|.streamSettings|.network,.tcpSettings.header.type,((.finalmask|.udp[1].settings.password,.udp[0].type)//(.kcpSettings|.seed,.header.type)),.quicSettings.header.type,.wsSettings.path,.httpSettings.path,.grpcSettings.serviceName,(.xhttpSettings.path//.splithttpSettings.path)' <<<$is_json_str)
+            is_json_data_host=$(jq '.inbounds[0]|.streamSettings|.grpc_host,.wsSettings.headers.Host,.httpSettings.host[0],(.xhttpSettings.host//.splithttpSettings.host)' <<<$is_json_str)
             is_json_data_reality=$(jq '.inbounds[0]|.streamSettings|.security,(.realitySettings|.serverNames[0],.publicKey,.privateKey)' <<<$is_json_str)
             is_up_var_set=(null is_protocol port uuid trojan_password ss_method ss_password door_addr door_port is_dynamic_port is_socks_user is_socks_pass net tcp_type kcp_seed kcp_type quic_type ws_path h2_path grpc_path xhttp_path grpc_host ws_host h2_host xhttp_host is_reality is_servername is_public_key is_private_key)
             [[ $is_debug ]] && msg "\n------------- debug: $is_config_file -------------"
@@ -1231,8 +1247,6 @@ get() {
             # splithttp
             if [[ $net == 'splithttp' ]]; then
                 net=xhttp
-                xhttp_path=$(jq -r '.inbounds[0]|.streamSettings|.splithttpSettings.path' <<<$is_json_str)
-                xhttp_host=$(jq -r '.inbounds[0]|.streamSettings|.splithttpSettings.host' <<<$is_json_str)
             fi
             path="${ws_path}${h2_path}${grpc_path}${xhttp_path}"
             host="${ws_host}${h2_host}${grpc_host}${xhttp_host}"
@@ -1314,7 +1328,7 @@ get() {
         *socks*)
             net=socks
             is_protocol=socks
-            [[ ! $is_socks_user ]] && is_socks_user=552039
+            [[ ! $is_socks_user ]] && is_socks_user=233boy
             [[ ! $is_socks_pass ]] && is_socks_pass=$uuid
             json_str='settings:{auth:"password",accounts:[{user:"'$is_socks_user'",pass:"'$is_socks_pass'"}],udp:true,ip:"0.0.0.0"}'
             ;;
@@ -1342,6 +1356,10 @@ get() {
             [[ ! $header_type ]] && header_type=$is_random_header_type
             [[ ! $is_no_kcp_seed && ! $kcp_seed ]] && kcp_seed=$uuid
             is_stream='kcpSettings:{seed:"'$kcp_seed'",header:{type:"'$header_type'"}}'
+            # new xray ver use finalmask
+            if [[ $is_xray_new ]]; then
+                is_stream='finalmask:{udp:[{type:"'$header_type'"},{type:"mkcp-aes128gcm",settings:{password:"'$kcp_seed'"}}]}'
+            fi
             ;;
         *quic*)
             net=quic
@@ -1455,7 +1473,11 @@ get() {
         bash <<<$is_install_sh
         ;;
     test-run)
-        systemctl list-units --full -all &>/dev/null
+        if [[ $is_alpine ]]; then
+            rc-status &>/dev/null
+        else
+            systemctl list-units --full -all &>/dev/null
+        fi
         [[ $? != 0 ]] && {
             _yellow "\n无法执行测试, 请检查 systemctl 状态.\n"
             return
@@ -1502,7 +1524,12 @@ info() {
     tcp | kcp | quic)
         is_can_change=(0 1 5 7)
         is_info_show=(0 1 2 3 4 5)
-        is_vmess_url=$(jq -c '{v:2,ps:"'xray-${net}-$is_addr'",add:"'$is_addr'",port:"'$port'",id:"'$uuid'",aid:"0",net:"'$net'",type:"'$header_type'",path:"'$kcp_seed'"}' <<<{})
+        is_info_header_type=$header_type
+        if [[ $is_xray_new ]]; then
+            # avoid GUI unsupport 'header-xxx' string
+            is_info_header_type=$(echo $header_type | sed 's/header-//;s/mkcp-original/none/' | sed 's/wechat/wechat-video/')
+        fi
+        is_vmess_url=$(jq -c '{v:2,ps:"'233boy-${net}-$is_addr'",add:"'$is_addr'",port:"'$port'",id:"'$uuid'",aid:"0",net:"'$net'",type:"'$is_info_header_type'",path:"'$kcp_seed'"}' <<<{})
         is_url=vmess://$(echo -n $is_vmess_url | base64 -w 0)
         is_tmp_port=$port
         [[ $is_dynamic_port ]] && {
@@ -1513,19 +1540,19 @@ info() {
             is_info_show+=(9)
             is_can_change+=(14)
         }
-        is_info_str=($is_protocol $is_addr "$is_tmp_port" $uuid $net $header_type $kcp_seed)
+        is_info_str=($is_protocol $is_addr "$is_tmp_port" $uuid $net $is_info_header_type $kcp_seed)
         if [[ $is_reality ]]; then
             is_color=41
             is_can_change=(0 1 5 10 11)
             is_info_show=(0 1 2 3 15 8 16 17 18)
             is_info_str=($is_protocol $is_addr $port $uuid xtls-rprx-vision reality $is_servername "chrome" $is_public_key)
-            is_url="$is_protocol://$uuid@$is_addr:$port?encryption=none&security=reality&flow=xtls-rprx-vision&type=tcp&sni=$is_servername&pbk=$is_public_key&fp=chrome#xray-$net-$is_addr"
+            is_url="$is_protocol://$uuid@$is_addr:$port?encryption=none&security=reality&flow=xtls-rprx-vision&type=tcp&sni=$is_servername&pbk=$is_public_key&fp=chrome#233boy-$net-$is_addr"
         fi
         ;;
     ss)
         is_can_change=(0 1 4 6)
         is_info_show=(0 1 2 10 11)
-        is_url="ss://$(echo -n ${ss_method}:${ss_password} | base64 -w 0)@${is_addr}:${port}#xray-$net-${is_addr}"
+        is_url="ss://$(echo -n ${ss_method}:${ss_password} | base64 -w 0)@${is_addr}:${port}#233boy-$net-${is_addr}"
         is_info_str=($is_protocol $is_addr $port $ss_password $ss_method)
         ;;
     ws | h2 | grpc | xhttp)
@@ -1538,7 +1565,7 @@ info() {
             is_url_path=serviceName
         }
         [[ $is_protocol == 'vmess' ]] && {
-            is_vmess_url=$(jq -c '{v:2,ps:"'xray-$net-$host'",add:"'$is_addr'",port:"'$is_https_port'",id:"'$uuid'",aid:"0",net:"'$net'",host:"'$host'",path:"'$path'",tls:"'tls'"}' <<<{})
+            is_vmess_url=$(jq -c '{v:2,ps:"'233boy-$net-$host'",add:"'$is_addr'",port:"'$is_https_port'",id:"'$uuid'",aid:"0",net:"'$net'",host:"'$host'",path:"'$path'",tls:"'tls'"}' <<<{})
             is_url=vmess://$(echo -n $is_vmess_url | base64 -w 0)
         } || {
             [[ $is_trojan ]] && {
@@ -1546,7 +1573,7 @@ info() {
                 is_can_change=(0 1 2 3 4)
                 is_info_show=(0 1 2 10 4 6 7 8)
             }
-            is_url="$is_protocol://$uuid@$host:$is_https_port?encryption=none&security=tls&type=$net&host=$host&${is_url_path}=$(sed 's#/#%2F#g' <<<$path)#xray-$net-$host"
+            is_url="$is_protocol://$uuid@$host:$is_https_port?encryption=none&security=tls&type=$net&host=$host&${is_url_path}=$(sed 's#/#%2F#g' <<<$path)#233boy-$net-$host"
         }
         [[ $is_caddy ]] && is_can_change+=(13)
         is_info_str=($is_protocol $is_addr $is_https_port $uuid $net $host $path 'tls')
@@ -1560,7 +1587,7 @@ info() {
         is_can_change=(0 1 15 4)
         is_info_show=(0 1 2 19 10)
         is_info_str=($is_protocol $is_addr $port $is_socks_user $is_socks_pass)
-        is_url="socks://$(echo -n ${is_socks_user}:${is_socks_pass} | base64 -w 0)@${is_addr}:${port}#xray-$net-${is_addr}"
+        is_url="socks://$(echo -n ${is_socks_user}:${is_socks_pass} | base64 -w 0)@${is_addr}:${port}#233boy-$net-${is_addr}"
         ;;
     http)
         is_can_change=(0 1)
@@ -1580,7 +1607,7 @@ info() {
         msg "$a $tt= \e[${is_color}m${is_info_str[$i]}\e[0m"
     done
     if [[ $is_new_install ]]; then
-        warn "首次安装请参考作者脚本帮助文档: $(msg_ul https://233boy.com/$is_core/$is_core-script/)"
+        warn "首次安装请查看脚本帮助文档: $(msg_ul https://233boy.com/$is_core/$is_core-script/)"
     fi
     if [[ $is_url ]]; then
         msg "------------- ${info_list[12]} -------------"
@@ -1592,7 +1619,7 @@ info() {
         msg "------------- no-auto-tls INFO -------------"
         msg "端口(port): $port"
         msg "路径(path): $is_tmp_path"
-#        msg "\e[41m帮助(help)\e[0m: $(msg_ul https://233boy.com/$is_core/no-auto-tls/)"
+        msg "\e[41m帮助(help)\e[0m: $(msg_ul https://233boy.com/$is_core/no-auto-tls/)"
     fi
     footer_msg
 }
@@ -1604,9 +1631,9 @@ footer_msg() {
     ####### 要点13脸吗只会改我链接的小人 #######
     unset c n m s b
     msg "------------- END -------------"
-#    msg "关注(tg): $(msg_ul https://t.me/tg2333)"
-#    msg "文档(doc): $(msg_ul https://233boy.com/$is_core/$is_core-script/)"
-#    msg "推广(ads): 机场推荐($is_core_name services): $(msg_ul https://g${c}e${n}t${m}j${s}m${b}s.com/)\n"
+    msg "关注(tg): $(msg_ul https://t.me/tg2333)"
+    msg "文档(doc): $(msg_ul https://233boy.com/$is_core/$is_core-script/)"
+    msg "推广(ads): 机场推荐($is_core_name services): $(msg_ul https://g${c}e${n}t${m}j${s}m${b}s.com/)\n"
     ####### 要点13脸吗只会改我链接的小人 #######
 }
 
@@ -1620,13 +1647,17 @@ url_qr() {
             msg "\n\e[${is_color}m${is_url}\e[0m\n"
             footer_msg
         } || {
-            link="https://fcurrk.github.io/qr-tools/qr.html#${is_url}"
+            link="https://233boy.github.io/tools/qr.html#${is_url}"
             msg "\n------------- $is_config_name & QR code 二维码 -------------"
             msg
             if [[ $(type -P qrencode) ]]; then
                 qrencode -t ANSI "${is_url}"
             else
-                msg "请安装 qrencode: $(_green "$cmd update -y; $cmd install qrencode -y")"
+                if [[ $is_alpine ]]; then
+                    msg "请安装 qrencode: $(_green "$cmd add libqrencode-tools")"
+                else
+                    msg "请安装 qrencode: $(_green "$cmd update -y; $cmd install qrencode -y")"
+                fi
             fi
             msg
             msg "如果无法正常显示或识别, 请使用下面的链接来生成二维码:"
@@ -1687,15 +1718,15 @@ update() {
     fi
     download $is_update_name $is_new_ver
     msg "更新成功, 当前 $is_show_name 版本: $(_green $is_new_ver)\n"
-#    msg "$(_green 请查看更新说明: https://github.com/$is_update_repo/releases/tag/$is_new_ver)\n"
+    msg "$(_green 请查看更新说明: https://github.com/$is_update_repo/releases/tag/$is_new_ver)\n"
     [[ $is_update_name != 'sh' ]] && manage restart $is_update_name &
 }
 
 # main menu; if no prefer args.
 is_main_menu() {
-    msg "\n----------------- $is_core_name script $is_sh_ver -----------------"
+    msg "\n------------- $is_core_name script $is_sh_ver by $author -------------"
     msg "$is_core_ver: $is_core_status"
-#    msg "群组(Chat): $(msg_ul https://t.me/tg233boy)"
+    msg "群组(Chat): $(msg_ul https://t.me/tg233boy)"
     is_main_start=1
     ask mainmenu
     case $REPLY in
@@ -1731,7 +1762,7 @@ is_main_menu() {
         show_help
         ;;
     9)
-        ask list is_do_other "启用BBR 查看日志 查看错误日志 测试运行 重装脚本 设置DNS 添加NO-AUTO-TLS配置"
+        ask list is_do_other "启用BBR 查看日志 查看错误日志 测试运行 重装脚本 设置DNS"
         case $REPLY in
         1)
             load bbr.sh
@@ -1752,10 +1783,6 @@ is_main_menu() {
         6)
             load dns.sh
             dns_set
-            ;;
-        7)
-            is_no_auto_tls=1
-            add
             ;;
         esac
         ;;
